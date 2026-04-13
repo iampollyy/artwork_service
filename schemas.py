@@ -64,6 +64,10 @@ class ArtworkUpdate(BaseModel):
     auction_id: Optional[int] = None
 
 
+class PriceUpdate(BaseModel):
+    current_price: float
+
+
 class ArtworkResponse(ArtworkBase):
     artwork_id: int
     created_at: Optional[datetime] = None
