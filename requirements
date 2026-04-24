@@ -4,3 +4,5 @@ sqlalchemy
 pyodbc 
 pydantic
 python-dotenv
+pytest
+httpx

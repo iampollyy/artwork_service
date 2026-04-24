@@ -1,15 +1,19 @@
+import logging
+
 from artwork_service.database import SessionLocal
 from artwork_service.models import Artist, Categories, Artwork
+
+logger = logging.getLogger(__name__)
 
 
 def seed_data():
     db = SessionLocal()
     try:
         if db.query(Artist).first():
-            print("[ArtworkService] Данные уже существуют, пропускаем seed.")
+            logger.info("Seed data already exists – skipping")
             return
 
-        # Художники
+        
         artists = [
             Artist(artist_name="Pablo", artist_surname="Picasso", country="Spain"),
             Artist(artist_name="Vincent", artist_surname="van Gogh", country="Netherlands"),
@@ -19,7 +23,6 @@ def seed_data():
         db.add_all(artists)
         db.flush()
 
-        # Категории
         categories = [
             Categories(category_name="Painting"),
             Categories(category_name="Sculpture"),
@@ -29,7 +32,6 @@ def seed_data():
         db.add_all(categories)
         db.flush()
 
-        # Произведения искусства
         artworks = [
             Artwork(
                 title="Guernica",
@@ -84,9 +86,9 @@ def seed_data():
         ]
         db.add_all(artworks)
         db.commit()
-        print("[ArtworkService] Seed данные добавлены успешно!")
+        logger.info("Seed data inserted successfully")
     except Exception as e:
         db.rollback()
-        print(f"[ArtworkService] Ошибка при seed: {e}")
+        logger.error("Error during seed: %s", e, exc_info=True)
     finally:
         db.close()

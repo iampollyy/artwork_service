@@ -1,9 +1,12 @@
+import logging
 import urllib
 import os
 from pathlib import Path
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, declarative_base
+
+logger = logging.getLogger(__name__)
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
@@ -32,17 +35,21 @@ Base = declarative_base()
 
 
 def get_db():
+    logger.debug("Opening new database session")
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
+        logger.debug("Database session closed")
 
 
 def create_schema():
+    logger.info("Ensuring schema '%s' exists", SCHEMA)
     with engine.connect() as conn:
         conn.execute(text(
             f"IF NOT EXISTS (SELECT * FROM sys.schemas WHERE name = '{SCHEMA}') "
             f"EXEC('CREATE SCHEMA [{SCHEMA}]')"
         ))
         conn.commit()
+    logger.info("Schema check complete")
