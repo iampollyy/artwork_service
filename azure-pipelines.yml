@@ -3,7 +3,7 @@
 # Stage 2: Build & Package
 
 trigger:
-- main
+  - main
 
 pool:
   vmImage: ubuntu-latest
@@ -14,47 +14,47 @@ stages:
 - stage: Lint_and_Test
   displayName: "Syntax Check & Unit Tests"
   jobs:
-  - job: LintAndTest
-    displayName: "Lint Python files & run pytest"
-    steps:
+    - job: LintAndTest
+      displayName: "Lint Python files & run pytest"
+      steps:
 
-    - task: UsePythonVersion@0
-      inputs:
-        versionSpec: '3.11'
-      displayName: "Use Python 3.11"
+        - task: UsePythonVersion@0
+          inputs:
+            versionSpec: '3.11'
+          displayName: "Use Python 3.11"
 
-    - script: |
-        python -m pip install --upgrade pip
-        pip install pyflakes pytest httpx fastapi sqlalchemy pydantic python-dotenv
-      displayName: "Install dependencies"
+        - script: |
+            python -m pip install --upgrade pip
+            pip install pyflakes pytest httpx fastapi sqlalchemy pydantic python-dotenv
+          displayName: "Install dependencies"
 
-    - script: |
-        echo "=== Syntax check with py_compile ==="
-        python -m py_compile main.py
-        python -m py_compile models.py
-        python -m py_compile schemas.py
-        python -m py_compile database.py
-        python -m py_compile seed.py
-        echo "=== Pyflakes static analysis ==="
-        python -m pyflakes main.py models.py schemas.py database.py seed.py
-      displayName: "Syntax & lint check"
+        - script: |
+            echo "=== Syntax check with py_compile ==="
+            python -m py_compile main.py
+            python -m py_compile models.py
+            python -m py_compile schemas.py
+            python -m py_compile database.py
+            python -m py_compile seed.py
+            echo "=== Pyflakes static analysis ==="
+            python -m pyflakes main.py models.py schemas.py database.py seed.py
+          displayName: "Syntax & lint check"
 
-    - script: |
-        python -m pytest tests/ -v --tb=short --junitxml=test-results/results.xml
-      displayName: "Run unit tests"
+        - script: |
+            python -m pytest tests/ -v --tb=short --junitxml=test-results/results.xml
+          displayName: "Run unit tests"
 
-    - task: PublishTestResults@2
-      condition: always()
-      inputs:
-        testResultsFormat: 'JUnit'
-        testResultsFiles: 'test-results/results.xml'
-        testRunTitle: 'ArtworkService Unit Tests'
-      displayName: "Publish test results"
+        - task: PublishTestResults@2
+          condition: always()
+          inputs:
+            testResultsFormat: 'JUnit'
+            testResultsFiles: 'test-results/results.xml'
+            testRunTitle: 'ArtworkService Unit Tests'
+          displayName: "Publish test results"
 
-    - publish: test-results
-      artifact: TestResults
-      condition: always()
-      displayName: "Upload test results as artifact"
+        - publish: test-results
+          artifact: TestResults
+          condition: always()
+          displayName: "Upload test results as artifact"
 
 # ======================== STAGE 2 – Build & Package ========================
 - stage: Build
@@ -62,25 +62,25 @@ stages:
   dependsOn: Lint_and_Test
   condition: succeeded()
   jobs:
-  - job: Package
-    displayName: "Create deployment package"
-    steps:
+    - job: Package
+      displayName: "Create deployment package"
+      steps:
 
-    - task: UsePythonVersion@0
-      inputs:
-        versionSpec: '3.11'
-      displayName: "Use Python 3.11"
+        - task: UsePythonVersion@0
+          inputs:
+            versionSpec: '3.11'
+          displayName: "Use Python 3.11"
 
-    - script: |
-        python -m pip install --upgrade pip
-        pip install -r requirements
-      displayName: "Install production dependencies"
+        - script: |
+            python -m pip install --upgrade pip
+            pip install -r requirements.txt
+          displayName: "Install production dependencies"
 
-    - script: |
-        mkdir -p $(Build.ArtifactStagingDirectory)/app
-        cp -r *.py requirements tests/ $(Build.ArtifactStagingDirectory)/app/
-      displayName: "Copy source to staging"
+        - script: |
+            mkdir -p $(Build.ArtifactStagingDirectory)/app
+            cp -r *.py requirements.txt tests/ $(Build.ArtifactStagingDirectory)/app/
+          displayName: "Copy source to staging"
 
-    - publish: $(Build.ArtifactStagingDirectory)/app
-      artifact: ArtworkServicePackage
-      displayName: "Publish application artifact"
+        - publish: $(Build.ArtifactStagingDirectory)/app
+          artifact: ArtworkServicePackage
+          displayName: "Publish application artifact"
