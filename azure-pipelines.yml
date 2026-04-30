@@ -25,7 +25,7 @@ stages:
 
     - script: |
         python -m pip install --upgrade pip
-        pip install py_compile pyflakes pytest httpx fastapi sqlalchemy pydantic python-dotenv
+        pip install pyflakes pytest httpx fastapi sqlalchemy pydantic python-dotenv
       displayName: "Install dependencies"
 
     - script: |
