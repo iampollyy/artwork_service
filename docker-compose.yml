@@ -1,0 +1,20 @@
+services:
+  artwork-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: artwork-service
+    ports:
+      - "${ARTWORK_SERVICE_PORT:-8001}:8000"
+    environment:
+      DB_SERVER: "${DB_SERVER:-host.docker.internal}"
+      DB_DATABASE: "${DB_DATABASE:-ArtworkDb}"
+      DB_USERNAME: "${DB_USERNAME:-sa}"
+      DB_PASSWORD: "${DB_PASSWORD:-ChangeMe_12345}"
+      PYTHONPATH: "/app"
+    networks:
+      - artwork-network
+
+networks:
+  artwork-network:
+    driver: bridge

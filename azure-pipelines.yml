@@ -1,6 +1,7 @@
-# Azure Pipeline – ArtworkService
-# Stage 1: Lint (syntax check) + Unit Tests with artifact publishing
-# Stage 2: Build & Package
+# Azure Pipeline - ArtworkService
+# Stage 1: Lint + tests
+# Stage 2: Docker build + push to Azure Container Registry
+# Stage 3: Deploy to Azure Container Apps
 
 trigger:
   - main
@@ -8,79 +9,92 @@ trigger:
 pool:
   vmImage: ubuntu-latest
 
+variables:
+  pythonVersion: '3.11'
+  dockerRegistryServiceConnection: 'CHANGE_ME_ACR_SERVICE_CONNECTION'
+  azureSubscription: 'CHANGE_ME_AZURE_RM_SERVICE_CONNECTION'
+  acrLoginServer: 'CHANGE_ME.azurecr.io'
+  imageRepository: 'artwork-service'
+  containerAppName: 'artwork-service'
+  resourceGroup: 'CHANGE_ME_RESOURCE_GROUP'
+
 stages:
+  - stage: Lint_and_Test
+    displayName: "Syntax Check & Unit Tests"
+    jobs:
+      - job: LintAndTest
+        displayName: "Lint Python files & run pytest"
+        steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: '$(pythonVersion)'
+            displayName: "Use Python $(pythonVersion)"
 
-# ======================== STAGE 1 – Lint & Test ========================
-- stage: Lint_and_Test
-  displayName: "Syntax Check & Unit Tests"
-  jobs:
-    - job: LintAndTest
-      displayName: "Lint Python files & run pytest"
-      steps:
+          - script: |
+              python -m pip install --upgrade pip
+              pip install -r requirements.txt pyflakes
+            displayName: "Install dependencies"
 
-        - task: UsePythonVersion@0
-          inputs:
-            versionSpec: '3.11'
-          displayName: "Use Python 3.11"
+          - script: |
+              echo "=== Syntax check with py_compile ==="
+              python -m py_compile main.py
+              python -m py_compile models.py
+              python -m py_compile schemas.py
+              python -m py_compile database.py
+              python -m py_compile seed.py
+              python -m py_compile business.py
+              echo "=== Pyflakes static analysis ==="
+              python -m pyflakes main.py models.py schemas.py database.py seed.py business.py
+            displayName: "Syntax & lint check"
 
-        - script: |
-            python -m pip install --upgrade pip
-            pip install pyflakes pytest httpx fastapi sqlalchemy pydantic python-dotenv
-          displayName: "Install dependencies"
+          - script: |
+              python -m pytest tests/ -v --tb=short --junitxml=test-results/results.xml
+            displayName: "Run unit tests"
 
-        - script: |
-            echo "=== Syntax check with py_compile ==="
-            python -m py_compile main.py
-            python -m py_compile models.py
-            python -m py_compile schemas.py
-            python -m py_compile database.py
-            python -m py_compile seed.py
-            echo "=== Pyflakes static analysis ==="
-            python -m pyflakes main.py models.py schemas.py database.py seed.py
-          displayName: "Syntax & lint check"
+          - task: PublishTestResults@2
+            condition: always()
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: 'test-results/results.xml'
+              testRunTitle: 'ArtworkService Unit Tests'
+            displayName: "Publish test results"
 
-        - script: |
-            python -m pytest tests/ -v --tb=short --junitxml=test-results/results.xml
-          displayName: "Run unit tests"
+          - publish: test-results
+            artifact: TestResults
+            condition: always()
+            displayName: "Upload test results as artifact"
 
-        - task: PublishTestResults@2
-          condition: always()
-          inputs:
-            testResultsFormat: 'JUnit'
-            testResultsFiles: 'test-results/results.xml'
-            testRunTitle: 'ArtworkService Unit Tests'
-          displayName: "Publish test results"
+  - stage: Docker_Build
+    displayName: "Docker Build & Push"
+    dependsOn: Lint_and_Test
+    condition: succeeded()
+    jobs:
+      - job: BuildAndPush
+        displayName: "Build and push Docker image"
+        steps:
+          - task: Docker@2
+            displayName: "Build and push image to ACR"
+            inputs:
+              command: buildAndPush
+              repository: '$(imageRepository)'
+              dockerfile: '$(Build.SourcesDirectory)/Dockerfile'
+              containerRegistry: '$(dockerRegistryServiceConnection)'
+              tags: |
+                $(Build.BuildId)
+                latest
 
-        - publish: test-results
-          artifact: TestResults
-          condition: always()
-          displayName: "Upload test results as artifact"
-
-# ======================== STAGE 2 – Build & Package ========================
-- stage: Build
-  displayName: "Build & Package"
-  dependsOn: Lint_and_Test
-  condition: succeeded()
-  jobs:
-    - job: Package
-      displayName: "Create deployment package"
-      steps:
-
-        - task: UsePythonVersion@0
-          inputs:
-            versionSpec: '3.11'
-          displayName: "Use Python 3.11"
-
-        - script: |
-            python -m pip install --upgrade pip
-            pip install -r requirements.txt
-          displayName: "Install production dependencies"
-
-        - script: |
-            mkdir -p $(Build.ArtifactStagingDirectory)/app
-            cp -r *.py requirements.txt tests/ $(Build.ArtifactStagingDirectory)/app/
-          displayName: "Copy source to staging"
-
-        - publish: $(Build.ArtifactStagingDirectory)/app
-          artifact: ArtworkServicePackage
-          displayName: "Publish application artifact"
+  - stage: Deploy
+    displayName: "Deploy to Azure Container Apps"
+    dependsOn: Docker_Build
+    condition: succeeded()
+    jobs:
+      - job: DeployContainerApp
+        displayName: "Deploy container app"
+        steps:
+          - task: AzureContainerApps@1
+            displayName: "Deploy ArtworkService"
+            inputs:
+              azureSubscription: '$(azureSubscription)'
+              imageToDeploy: '$(acrLoginServer)/$(imageRepository):$(Build.BuildId)'
+              containerAppName: '$(containerAppName)'
+              resourceGroup: '$(resourceGroup)'

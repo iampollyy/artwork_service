@@ -5,7 +5,13 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from artwork_service.database import engine, get_db, create_schema, Base
-from artwork_service.models import Artwork, Artist, Categories
+from artwork_service.business import (
+    apply_artwork_update,
+    apply_price_update,
+    apply_status_rules,
+    validate_artwork_create,
+)
+from artwork_service.models import Artwork
 from artwork_service.schemas import (
     ArtworkResponse, ArtworkCreate, ArtworkUpdate, PriceUpdate
 )
@@ -49,6 +55,7 @@ def get_artwork(artwork_id: int, db: Session = Depends(get_db)):
 @app.post("/artworks", response_model=ArtworkResponse, status_code=201)
 def create_artwork(data: ArtworkCreate, db: Session = Depends(get_db)):
     logger.info("Creating artwork: %s", data.title)
+    validate_artwork_create(data)
     artwork = Artwork(**data.model_dump())
     db.add(artwork)
     db.commit()
@@ -64,8 +71,7 @@ def update_artwork(artwork_id: int, data: ArtworkUpdate, db: Session = Depends(g
     if not artwork:
         logger.warning("Artwork id=%d not found for update", artwork_id)
         raise HTTPException(status_code=404, detail="Artwork not found")
-    for key, value in data.model_dump(exclude_unset=True).items():
-        setattr(artwork, key, value)
+    apply_artwork_update(artwork, data)
     db.commit()
     db.refresh(artwork)
     logger.info("Artwork id=%d updated successfully", artwork_id)
@@ -79,7 +85,7 @@ def update_artwork_status(artwork_id: int, status: str, db: Session = Depends(ge
     if not artwork:
         logger.warning("Artwork id=%d not found for status update", artwork_id)
         raise HTTPException(status_code=404, detail="Artwork not found")
-    artwork.status = status
+    apply_status_rules(artwork, status)
     db.commit()
     db.refresh(artwork)
     logger.info("Artwork id=%d status updated to '%s'", artwork_id, status)
@@ -93,7 +99,7 @@ def update_artwork_price(artwork_id: int, data: PriceUpdate, db: Session = Depen
     if not artwork:
         logger.warning("Artwork id=%d not found for price update", artwork_id)
         raise HTTPException(status_code=404, detail="Artwork not found")
-    artwork.current_price = data.current_price
+    apply_price_update(artwork, data.current_price)
     db.commit()
     db.refresh(artwork)
     logger.info("Artwork id=%d price updated to %.2f", artwork_id, data.current_price)
