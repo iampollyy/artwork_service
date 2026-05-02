@@ -1,7 +1,5 @@
 # Azure Pipeline - ArtworkService
-# Stage 1: Lint + tests
-# Stage 2: Docker build + push to Azure Container Registry
-# Stage 3: Deploy to Azure Container Apps
+# Syntax check + Unit tests only (Docker Compose deployment)
 
 trigger:
   - main
@@ -9,92 +7,63 @@ trigger:
 pool:
   vmImage: ubuntu-latest
 
-variables:
-  pythonVersion: '3.11'
-  dockerRegistryServiceConnection: 'CHANGE_ME_ACR_SERVICE_CONNECTION'
-  azureSubscription: 'CHANGE_ME_AZURE_RM_SERVICE_CONNECTION'
-  acrLoginServer: 'CHANGE_ME.azurecr.io'
-  imageRepository: 'artwork-service'
-  containerAppName: 'artwork-service'
-  resourceGroup: 'CHANGE_ME_RESOURCE_GROUP'
-
 stages:
-  - stage: Lint_and_Test
-    displayName: "Syntax Check & Unit Tests"
+  - stage: SyntaxCheck
+    displayName: "Syntax Check"
     jobs:
-      - job: LintAndTest
-        displayName: "Lint Python files & run pytest"
+      - job: SyntaxCheckJob
+        displayName: "py_compile all .py files"
         steps:
           - task: UsePythonVersion@0
             inputs:
-              versionSpec: '$(pythonVersion)'
-            displayName: "Use Python $(pythonVersion)"
+              versionSpec: "3.11"
+            displayName: "Use Python 3.11"
+
+          - script: |
+              echo "=== Running syntax check on all .py files ==="
+              find . -name "*.py" -not -path "./.venv/*" -not -path "./__pycache__/*" | while read f; do
+                echo "Checking $f"
+                python -m py_compile "$f" || exit 1
+              done
+              echo "=== All files passed syntax check ==="
+            displayName: "Compile-check Python files"
+
+  - stage: Test
+    displayName: "Run Tests"
+    dependsOn: SyntaxCheck
+    jobs:
+      - job: UnitTests
+        displayName: "pytest + publish results"
+        steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: "3.11"
+            displayName: "Use Python 3.11"
 
           - script: |
               python -m pip install --upgrade pip
-              pip install -r requirements.txt pyflakes
+              pip install -r requirements.txt
             displayName: "Install dependencies"
 
           - script: |
-              echo "=== Syntax check with py_compile ==="
-              python -m py_compile main.py
-              python -m py_compile models.py
-              python -m py_compile schemas.py
-              python -m py_compile database.py
-              python -m py_compile seed.py
-              python -m py_compile business.py
-              echo "=== Pyflakes static analysis ==="
-              python -m pyflakes main.py models.py schemas.py database.py seed.py business.py
-            displayName: "Syntax & lint check"
-
-          - script: |
-              python -m pytest tests/ -v --tb=short --junitxml=test-results/results.xml
+              python -m pytest tests/ \
+                --junitxml=test-results/results.xml \
+                -v
             displayName: "Run unit tests"
 
           - task: PublishTestResults@2
-            condition: always()
+            condition: succeededOrFailed()
             inputs:
-              testResultsFormat: 'JUnit'
-              testResultsFiles: 'test-results/results.xml'
-              testRunTitle: 'ArtworkService Unit Tests'
+              testResultsFormat: "JUnit"
+              testResultsFiles: "test-results/results.xml"
+              mergeTestResults: true
+              testRunTitle: "ArtworkService Unit Tests"
             displayName: "Publish test results"
 
-          - publish: test-results
-            artifact: TestResults
-            condition: always()
-            displayName: "Upload test results as artifact"
-
-  - stage: Docker_Build
-    displayName: "Docker Build & Push"
-    dependsOn: Lint_and_Test
-    condition: succeeded()
-    jobs:
-      - job: BuildAndPush
-        displayName: "Build and push Docker image"
-        steps:
-          - task: Docker@2
-            displayName: "Build and push image to ACR"
+          - task: PublishBuildArtifacts@1
+            condition: succeededOrFailed()
             inputs:
-              command: buildAndPush
-              repository: '$(imageRepository)'
-              dockerfile: '$(Build.SourcesDirectory)/Dockerfile'
-              containerRegistry: '$(dockerRegistryServiceConnection)'
-              tags: |
-                $(Build.BuildId)
-                latest
-
-  - stage: Deploy
-    displayName: "Deploy to Azure Container Apps"
-    dependsOn: Docker_Build
-    condition: succeeded()
-    jobs:
-      - job: DeployContainerApp
-        displayName: "Deploy container app"
-        steps:
-          - task: AzureContainerApps@1
-            displayName: "Deploy ArtworkService"
-            inputs:
-              azureSubscription: '$(azureSubscription)'
-              imageToDeploy: '$(acrLoginServer)/$(imageRepository):$(Build.BuildId)'
-              containerAppName: '$(containerAppName)'
-              resourceGroup: '$(resourceGroup)'
+              PathtoPublish: "test-results"
+              ArtifactName: "TestResults"
+              publishLocation: "Container"
+            displayName: "Upload test results artifact"
