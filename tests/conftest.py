@@ -2,6 +2,13 @@
 Shared fixtures for artwork_service tests.
 Uses an in-memory SQLite database so no real DB is required.
 """
+import sys
+import os
+from pathlib import Path
+
+# Add parent directory to Python path so artwork_service can be imported
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 import pytest
 from unittest.mock import patch
 from sqlalchemy import create_engine, event, text
@@ -9,11 +16,11 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from fastapi.testclient import TestClient
 
-import artwork_service.database as _db_mod
+import database as _db_mod
 _db_mod.SCHEMA = None
 
-from artwork_service.database import Base
-from artwork_service.models import Artist, Categories, Artwork  
+from database import Base
+from models import Artist, Categories, Artwork  
 
 for _tbl in Base.metadata.tables.values():
     _tbl.schema = None
