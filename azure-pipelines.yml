@@ -46,6 +46,7 @@ stages:
             displayName: "Install dependencies"
 
           - script: |
+              export PYTHONPATH=$(pwd)
               python -m pytest tests/ \
                 --junitxml=test-results/results.xml \
                 -v
